@@ -8,12 +8,7 @@ import { arabicTranslations } from "./translations";
 
 type Unpatch = () => void;
 
-// نخزّن هنا كل دوال إلغاء التصحيح التي يرجعها @vendetta/patcher
-// (المكتبة لا تصدّر unpatchAll، لذا يجب تتبعها يدوياً)
 const patches: Unpatch[] = [];
-
-// مجموعة لتتبع المفاتيح التي طُلبت ولم نجد لها ترجمة، لتفادي تكرار
-// نفس الرسالة في الـ console مئات المرات
 const loggedMissingKeys = new Set<string>();
 
 function safeUnpatchAll() {
@@ -33,11 +28,10 @@ export const onLoad = () => {
     if (storage.enableRTL === undefined) storage.enableRTL = true;
     if (storage.debugMode === undefined) storage.debugMode = false;
 
-    let success = false;
+    // Prevent duplicate hooks when the plugin is reloaded without a full process restart.
+    safeUnpatchAll();
 
-    if (storage.enableArabic) {
-      success = patchTranslations();
-    }
+    const success = storage.enableArabic ? patchTranslations() : false;
 
     if (storage.enableRTL && RN?.I18nManager) {
       try {
@@ -64,20 +58,26 @@ export const onLoad = () => {
 function patchTranslations(): boolean {
   let isPatched = false;
 
-  // تحديد كائن i18n المطلوب مع عدة بدائل احتياطية
+  // Use the imported module only when it actually looks like an i18n module.
+  // Otherwise, continue searching instead of letting a truthy but unrelated i18n
+  // export prevent the fallbacks from running.
+  const importedI18n: any = i18n;
   const targetModule: any =
-    i18n ||
-    findByProps("getMessage") ||
-    findByProps("getLocale") ||
-    findByProps("Messages");
+    importedI18n &&
+    (importedI18n.Messages ||
+      typeof importedI18n.getMessage === "function" ||
+      typeof importedI18n.getParsedMessage === "function" ||
+      typeof importedI18n.get === "function")
+      ? importedI18n
+      : findByProps("getMessage") ||
+        findByProps("getParsedMessage") ||
+        findByProps("getLocale") ||
+        findByProps("Messages");
 
   if (!targetModule) return false;
 
-  // 1. تعديل كائن Messages المباشر إن وجد
   if (targetModule.Messages) {
-    for (const key in arabicTranslations) {
-      if (!Object.prototype.hasOwnProperty.call(arabicTranslations, key)) continue;
-
+    for (const key of Object.keys(arabicTranslations)) {
       try {
         Object.defineProperty(targetModule.Messages, key, {
           get: () => arabicTranslations[key],
@@ -89,17 +89,16 @@ function patchTranslations(): boolean {
         try {
           targetModule.Messages[key] = arabicTranslations[key];
           isPatched = true;
-        } catch (err) {
-          // تجاهل مفتاح واحد إن تعذر تعديله، ولا نوقف بقية العملية
+        } catch {
+          // Ignore an individual read-only translation key.
         }
       }
     }
   }
 
-  // 2. اعتراض دوال جلب النصوص باستخدام @vendetta/patcher
-  const methodsToPatch = ["getMessage", "getParsedMessage", "get"];
-
-  for (const methodName of methodsToPatch) {
+  // getParsedMessage may return a structured value, so only replace methods
+  // that are expected to return the message string itself.
+  for (const methodName of ["getMessage", "get"]) {
     if (typeof targetModule[methodName] !== "function") continue;
 
     try {
@@ -107,11 +106,10 @@ function patchTranslations(): boolean {
         const key = args?.[0];
 
         if (typeof key === "string") {
-          if (arabicTranslations[key]) {
+          if (Object.prototype.hasOwnProperty.call(arabicTranslations, key)) {
             return arabicTranslations[key];
           }
 
-          // وضع التصحيح: يساعدك على معرفة المفاتيح الحقيقية غير المترجمة
           if (storage.debugMode && !loggedMissingKeys.has(key)) {
             loggedMissingKeys.add(key);
             console.log(`[Arabic Discord] مفتاح غير مترجم: "${key}" ->`, res);
@@ -132,15 +130,12 @@ function patchTranslations(): boolean {
 }
 
 export const onUnload = () => {
-  try {
-    safeUnpatchAll();
-  } catch (e) {
-    console.error("[Arabic Discord] Unpatch Error:", e);
-  }
+  safeUnpatchAll();
 
   try {
     if (RN?.I18nManager) {
       RN.I18nManager.forceRTL(false);
+      RN.I18nManager.allowRTL(false);
     }
   } catch (e) {
     console.error("[Arabic Discord] RTL Reset Error:", e);
@@ -148,8 +143,9 @@ export const onUnload = () => {
 
   try {
     showToast("تم إيقاف الإضافة", getAssetIDByName("Small"));
-  } catch (e) {}
+  } catch {
+    // Toasts may be unavailable while the plugin host is shutting down.
+  }
 };
 
-export { default as settings } from "./Settings";
-      
+export { default as settings } from "./settings";
