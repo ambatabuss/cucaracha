@@ -22,6 +22,19 @@ function safeUnpatchAll() {
   }
 }
 
+function safeFindByProps(...props: string[]) {
+  for (const prop of props) {
+    try {
+      const result = findByProps(prop);
+      if (result) return result;
+    } catch (e) {
+      console.warn(`[Arabic Discord] findByProps(${prop}) failed:`, e);
+    }
+  }
+
+  return null;
+}
+
 export const onLoad = () => {
   try {
     if (storage.enableArabic === undefined) storage.enableArabic = true;
@@ -69,10 +82,7 @@ function patchTranslations(): boolean {
       typeof importedI18n.getParsedMessage === "function" ||
       typeof importedI18n.get === "function")
       ? importedI18n
-      : findByProps("getMessage") ||
-        findByProps("getParsedMessage") ||
-        findByProps("getLocale") ||
-        findByProps("Messages");
+      : safeFindByProps("getMessage", "getParsedMessage", "getLocale", "Messages");
 
   if (!targetModule) return false;
 
