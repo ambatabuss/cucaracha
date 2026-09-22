@@ -1,0 +1,8 @@
+{
+  "name": "تعريب ديسكورد (Discord Arabic)",
+  "description": "يستبدل نصوص واجهة ديسكورد الإنجليزية بترجمة عربية قابلة للتوسيع. متوافق مع أي عميل تعديل يشارك واجهة الإضافات @vendetta/* مثل Vendetta و Revenge و Bunny.",
+  "authors": [
+    { "name": "أنت", "id": "0" }
+  ],
+  "main": "index.js"
+}
