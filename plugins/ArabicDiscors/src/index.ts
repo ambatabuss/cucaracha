@@ -11,6 +11,19 @@ type Unpatch = () => void;
 const patches: Unpatch[] = [];
 const loggedMissingKeys = new Set<string>();
 
+function isLikelyI18nModule(module: any): boolean {
+  if (!module || typeof module !== "object") return false;
+
+  return (
+    !!module.Messages ||
+    typeof module.getMessage === "function" ||
+    typeof module.getParsedMessage === "function" ||
+    typeof module.get === "function" ||
+    typeof module.getLocale === "function" ||
+    typeof module.defaultLocale === "string"
+  );
+}
+
 function safeUnpatchAll() {
   while (patches.length) {
     const unpatch = patches.pop();
@@ -26,7 +39,7 @@ function safeFindByProps(...props: string[]) {
   for (const prop of props) {
     try {
       const result = findByProps(prop);
-      if (result) return result;
+      if (result && isLikelyI18nModule(result)) return result;
     } catch (e) {
       console.warn(`[Arabic Discord] findByProps(${prop}) failed:`, e);
     }
@@ -76,13 +89,9 @@ function patchTranslations(): boolean {
   // export prevent the fallbacks from running.
   const importedI18n: any = i18n;
   const targetModule: any =
-    importedI18n &&
-    (importedI18n.Messages ||
-      typeof importedI18n.getMessage === "function" ||
-      typeof importedI18n.getParsedMessage === "function" ||
-      typeof importedI18n.get === "function")
+    importedI18n && isLikelyI18nModule(importedI18n)
       ? importedI18n
-      : safeFindByProps("getMessage", "getParsedMessage", "getLocale", "Messages");
+      : safeFindByProps("getMessage", "getParsedMessage", "getLocale", "defaultLocale", "Messages");
 
   if (!targetModule) return false;
 
