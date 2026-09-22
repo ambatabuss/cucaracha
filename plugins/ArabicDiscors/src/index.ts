@@ -176,5 +176,4 @@ export const onUnload = () => {
   } catch (e) {}
 };
 
-export { default as settings } from "./Settings";
-              
+export { default as settings } from "./settings";
